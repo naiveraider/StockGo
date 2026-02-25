@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import time
 
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, select
 
 from app.models.analysis import AnalysisOutput, AnalysisRun
@@ -16,6 +18,43 @@ from app.services.timeutil import as_utc_dt
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _commit_with_retry(
+    session: Session,
+    *,
+    max_retries: int = 3,
+    base_backoff_s: float = 0.2,
+    on_retry: callable | None = None,
+) -> None:
+    """
+    Commit the current transaction, retrying on transient MySQL deadlock/lock timeout errors.
+    """
+    for attempt in range(max_retries):
+        try:
+            session.commit()
+            return
+        except OperationalError as exc:
+            orig = getattr(exc, "orig", None)
+            code = None
+            if orig is not None and getattr(orig, "args", None):
+                # PyMySQL: (1205, 'Lock wait timeout exceeded; try restarting transaction')
+                code = orig.args[0]
+
+            # 1205: lock wait timeout, 1213: deadlock
+            if code not in (1205, 1213):
+                raise
+
+            session.rollback()
+            if attempt == max_retries - 1:
+                raise
+
+            if on_retry is not None:
+                on_retry()
+
+            # Simple exponential backoff
+            sleep_for = base_backoff_s * (2**attempt)
+            time.sleep(sleep_for)
 
 
 def create_run(
@@ -36,7 +75,7 @@ def create_run(
         updated_at=_now_utc(),
     )
     session.add(run)
-    session.commit()
+    _commit_with_retry(session, on_retry=lambda: session.add(run))
     session.refresh(run)
     return run
 
@@ -51,7 +90,7 @@ def set_run_failed(session: Session, run: AnalysisRun, err: str) -> None:
     run.error = (err or "unknown error")[:1024]
     run.updated_at = _now_utc()
     session.add(run)
-    session.commit()
+    _commit_with_retry(session, on_retry=lambda: session.add(run))
 
 
 def set_run_completed(session: Session, run: AnalysisRun, *, input_hash: str, model_used: str | None) -> None:
@@ -60,7 +99,7 @@ def set_run_completed(session: Session, run: AnalysisRun, *, input_hash: str, mo
     run.model = model_used
     run.updated_at = _now_utc()
     session.add(run)
-    session.commit()
+    _commit_with_retry(session, on_retry=lambda: session.add(run))
 
 
 def store_output(session: Session, *, run_db_id: int, report: dict) -> None:
@@ -74,7 +113,7 @@ def store_output(session: Session, *, run_db_id: int, report: dict) -> None:
         evidence=report.get("evidence") or {},
     )
     session.add(out)
-    session.commit()
+    _commit_with_retry(session, on_retry=lambda: session.add(out))
 
 
 def run_analysis_sync(session: Session, req: AnalysisRunRequest) -> AnalysisRunResponse:
