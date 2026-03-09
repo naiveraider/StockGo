@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type StockSummary = {
@@ -208,7 +208,7 @@ export function HomeStocksPreview() {
               <th className="px-4 py-2 text-right">Last</th>
               <th className="px-4 py-2 text-right">Change</th>
               <th className="px-4 py-2 text-right">Market cap</th>
-              <th className="px-4 py-2 text-right">Action</th>
+              <th className="px-4 py-2 text-right">Bias</th>
             </tr>
           </thead>
           <tbody>
@@ -233,19 +233,56 @@ export function HomeStocksPreview() {
                   </td>
                   <td className="px-4 py-2 text-right text-slate-700">{fmtCap(s.market_cap)}</td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await fetch(
-                          `${API_BASE}/v1/screener/add?ticker=${encodeURIComponent(s.ticker)}`,
-                          { method: "POST" }
-                        );
-                        router.push(`/stocks?symbol=${encodeURIComponent(s.ticker)}`);
-                      }}
-                      className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100"
-                    >
-                      Add to Screener
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const token =
+                            typeof window !== "undefined"
+                              ? window.localStorage.getItem("stockgo_token")
+                              : null;
+                          if (!token) {
+                            router.push("/login");
+                            return;
+                          }
+                          await fetch(
+                            `${API_BASE}/v1/screener/add?ticker=${encodeURIComponent(s.ticker)}&bucket=short`,
+                            {
+                              method: "POST",
+                              headers: { Authorization: `Bearer ${token}` },
+                            }
+                          );
+                          router.push(`/stocks?symbol=${encodeURIComponent(s.ticker)}`);
+                        }}
+                        className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100"
+                      >
+                        Short
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const token =
+                            typeof window !== "undefined"
+                              ? window.localStorage.getItem("stockgo_token")
+                              : null;
+                          if (!token) {
+                            router.push("/login");
+                            return;
+                          }
+                          await fetch(
+                            `${API_BASE}/v1/screener/add?ticker=${encodeURIComponent(s.ticker)}&bucket=long`,
+                            {
+                              method: "POST",
+                              headers: { Authorization: `Bearer ${token}` },
+                            }
+                          );
+                          router.push(`/long-term?symbol=${encodeURIComponent(s.ticker)}`);
+                        }}
+                        className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100"
+                      >
+                        Long
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

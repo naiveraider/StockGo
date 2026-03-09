@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import useSWR from "swr";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { authedJson, fetchCurrentUser, getStoredToken, hasMinRole, type UserRole } from "../../../../lib/auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 type Report = {
   status: string;
@@ -15,9 +15,34 @@ type Report = {
 
 export default function LongTermPage({ params }: { params: { ticker: string } }) {
   const ticker = useMemo(() => (params.ticker || "TSLA").toUpperCase(), [params.ticker]);
+  const [token, setToken] = useState<string | null>(null);
+  const [access, setAccess] = useState<"checking" | "need-login" | "forbidden" | "ok">("checking");
+
+  useEffect(() => {
+    const init = async () => {
+      const t = getStoredToken();
+      if (!t) {
+        setAccess("need-login");
+        return;
+      }
+      const me = await fetchCurrentUser(API_BASE, t);
+      if (!me) {
+        setAccess("need-login");
+        return;
+      }
+      if (!hasMinRole(me.role, "intermediate" as UserRole)) {
+        setAccess("forbidden");
+        return;
+      }
+      setToken(t);
+      setAccess("ok");
+    };
+    void init();
+  }, []);
+
   const { data, error, isLoading } = useSWR<Report>(
-    `${API_BASE}/v1/report/long-term?ticker=${encodeURIComponent(ticker)}&years=5`,
-    fetcher
+    access === "ok" && token ? `${API_BASE}/v1/report/long-term?ticker=${encodeURIComponent(ticker)}&years=5` : null,
+    (url: string) => authedJson<Report>(url, token as string)
   );
 
   const bias = data?.report?.bias;
@@ -30,6 +55,26 @@ export default function LongTermPage({ params }: { params: { ticker: string } })
         : bias === "NEUTRAL"
           ? "text-amber-600"
           : "text-slate-900";
+
+  if (access === "checking") {
+    return <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">Checking access...</div>;
+  }
+
+  if (access === "need-login") {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-slate-700">
+        Please <Link className="text-yahooBlue hover:underline" href="/login">login</Link> to access Long-term bias.
+      </div>
+    );
+  }
+
+  if (access === "forbidden") {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        Long-term bias requires at least the Intermediate role.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -16,14 +16,24 @@ docker compose up -d
 cp .env.example .env
 ```
 
-3) 安装依赖与启动 API
+3) 安装依赖与启动 API（**前端请求 localhost:8000，必须先启动 API**）
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+4) 启动前端（另开终端）
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+浏览器打开 http://localhost:3000。若出现 “localhost took too long to respond”，请确认上一步的 API 已在运行（访问 http://localhost:8000/health 应返回 `{"ok":true}`）。
 
 ## 常用接口
 

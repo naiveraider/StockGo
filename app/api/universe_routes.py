@@ -45,11 +45,16 @@ def stocks_search(
     limit: int = Query(10, ge=1, le=20),
     session: Session = Depends(get_session),
 ):
-    query = q.strip().upper()
+    query_raw = q.strip()
+    query = query_raw.upper()
+    name_like = f"%{query_raw.lower()}%"
     items = session.exec(
         select(Instrument)
         .where(Instrument.is_etf == False)  # noqa: E712
-        .where((Instrument.ticker.like(f"{query}%")) | (Instrument.name.like(f"%{q.strip()}%")))
+        .where(
+            (func.upper(Instrument.ticker).like(f"{query}%"))
+            | (func.lower(Instrument.name).like(name_like))
+        )
         .order_by(Instrument.ticker.asc())
         .limit(limit)
     ).all()
@@ -63,21 +68,23 @@ def stocks_summary(
     q: str | None = Query(None, description="Optional search by symbol prefix or name"),
     session: Session = Depends(get_session),
 ):
-    base = select(Instrument).where(Instrument.is_etf == False)  # noqa: E712
+    filters = [Instrument.is_etf == False]  # noqa: E712
     if q:
-        query = q.strip()
-        if query:
-            up = query.upper()
-            base = base.where(
-                (Instrument.ticker.like(f"{up}%")) | (Instrument.name.like(f"%{query}%"))
+        query_raw = q.strip()
+        if query_raw:
+            up = query_raw.upper()
+            filters.append(
+                (func.upper(Instrument.ticker).like(f"{up}%"))
+                | (func.lower(Instrument.name).like(f"%{query_raw.lower()}%"))
             )
+    base = select(Instrument).where(*filters)
     total = session.exec(select(func.count()).select_from(base.subquery())).one()
 
     rows = session.exec(
         select(Instrument, StockQuote)
         .select_from(Instrument)
         .outerjoin(StockQuote, StockQuote.instrument_id == Instrument.id)
-        .where(Instrument.is_etf == False)  # noqa: E712
+        .where(*filters)
         .order_by(Instrument.ticker.asc())
         .offset(offset)
         .limit(limit)

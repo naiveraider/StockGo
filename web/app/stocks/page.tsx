@@ -1,11 +1,12 @@
 "use client";
 
 import useSWR from "swr";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authedJson, fetchCurrentUser, getStoredToken, hasMinRole, type UserRole } from "../../lib/auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type ShortTermRow = {
@@ -33,10 +34,12 @@ function SearchDialog({
   open,
   onClose,
   onSelect,
+  onAdd,
 }: {
   open: boolean;
   onClose: () => void;
   onSelect: (ticker: string) => void;
+  onAdd: (ticker: string) => void;
 }) {
   const [q, setQ] = useState("");
   const query = q.trim();
@@ -81,18 +84,26 @@ function SearchDialog({
             <div className="px-4 py-3 text-sm text-slate-500">No matches.</div>
           )}
           {results.map((s) => (
-            <button
-              key={s.ticker}
-              type="button"
-              onClick={() => {
-                onSelect(s.ticker);
-                onClose();
-              }}
-              className="flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-2 text-left hover:bg-slate-50"
-            >
-              <span className="font-medium text-slate-900">{s.ticker}</span>
-              <span className="truncate text-sm text-slate-600">{s.name || ""}</span>
-            </button>
+            <div key={s.ticker} className="flex items-center gap-2 border-t border-slate-100 px-4 py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(s.ticker);
+                  onClose();
+                }}
+                className="flex flex-1 items-center justify-between gap-3 text-left hover:text-yahooBlue"
+              >
+                <span className="font-medium text-slate-900">{s.ticker}</span>
+                <span className="truncate text-sm text-slate-600">{s.name || ""}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onAdd(s.ticker)}
+                className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+              >
+                Add
+              </button>
+            </div>
           ))}
         </div>
         <div className="border-t border-slate-200 px-4 py-2 text-right">
@@ -114,6 +125,30 @@ export default function StocksPage() {
   const [offset, setOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [access, setAccess] = useState<"checking" | "need-login" | "forbidden" | "ok">("checking");
+
+  useEffect(() => {
+    const init = async () => {
+      const t = getStoredToken();
+      if (!t) {
+        setAccess("need-login");
+        return;
+      }
+      const me = await fetchCurrentUser(API_BASE, t);
+      if (!me) {
+        setAccess("need-login");
+        return;
+      }
+      if (!hasMinRole(me.role, "intermediate" as UserRole)) {
+        setAccess("forbidden");
+        return;
+      }
+      setToken(t);
+      setAccess("ok");
+    };
+    void init();
+  }, []);
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();
@@ -124,7 +159,10 @@ export default function StocksPage() {
   }, [offset, searchQuery]);
 
   const url = `${API_BASE}/v1/screener/short-term?${queryParams}`;
-  const { data, error, isLoading } = useSWR<ShortTermPage>(url, fetcher);
+  const { data, error, isLoading, mutate } = useSWR<ShortTermPage>(
+    access === "ok" && token ? url : null,
+    (u: string) => authedJson<ShortTermPage>(u, token as string)
+  );
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 
@@ -132,6 +170,26 @@ export default function StocksPage() {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const from = total === 0 ? 0 : offset + 1;
   const to = Math.min(offset + limit, total);
+
+  if (access === "checking") {
+    return <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">Checking access...</div>;
+  }
+
+  if (access === "need-login") {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-slate-700">
+        Please <Link className="text-yahooBlue hover:underline" href="/login">login</Link> to access Short-term bias.
+      </div>
+    );
+  }
+
+  if (access === "forbidden") {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        Short-term bias requires at least the Intermediate role.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -258,6 +316,18 @@ export default function StocksPage() {
         onSelect={(ticker) => {
           setSearchOpen(false);
           router.push(`/quote/${ticker}`);
+        }}
+        onAdd={async (ticker) => {
+          if (!token) {
+            router.push("/login");
+            return;
+          }
+          await fetch(`${API_BASE}/v1/screener/add?ticker=${encodeURIComponent(ticker)}&bucket=short`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setSearchOpen(false);
+          await mutate();
         }}
       />
     </div>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin_routes import router as admin_router
 from app.api.auth_routes import router as auth_router
 from app.api.routes import router
 from app.api.universe_routes import router as universe_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
         scheduler_service.shutdown()
 
     app.include_router(auth_router)
+    app.include_router(admin_router)
     app.include_router(universe_router)
     app.include_router(screener_router)
     app.include_router(router)

@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=60 * 24, alias="JWT_EXPIRE_MINUTES")
 
+    # Default seeded admin account (for local bootstrap)
+    admin_seed_username: str = Field(default="admin", alias="ADMIN_SEED_USERNAME")
+    admin_seed_password: str = Field(default="123", alias="ADMIN_SEED_PASSWORD")
+    admin_seed_email: str = Field(default="admin@stockgo.app", alias="ADMIN_SEED_EMAIL")
+
     # SEC EDGAR (required: identify your app; use your email or company)
     sec_user_agent: str = Field(
         default="StockGo contact@example.com",

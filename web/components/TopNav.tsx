@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { AuthBar } from "./AuthBar";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface Instrument {
@@ -60,6 +60,12 @@ export function TopNav() {
           </Link>
           <Link className="hover:text-yahooBlue" href="/long-term">
             Long-term bias
+          </Link>
+          <Link className="hover:text-yahooBlue" href="/short-term-pick">
+            Short-term pick
+          </Link>
+          <Link className="hover:text-yahooBlue" href="/long-term-pick">
+            Long-term pick
           </Link>
         </nav>
 

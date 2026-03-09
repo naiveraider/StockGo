@@ -9,6 +9,7 @@ from passlib.context import CryptContext
 from sqlmodel import Session, select
 
 from app.core.config import get_settings
+from app.core.roles import ROLE_ADMIN, ROLE_ADVANCED, ROLE_INTERMEDIATE, has_min_role, is_admin
 from app.db.session import get_session
 from app.models.user import User
 
@@ -57,4 +58,35 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+
+def get_current_admin(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+    session: Session = Depends(get_session),
+) -> User:
+    """Require authenticated user with admin role."""
+    user = get_current_user(credentials, session)
+    if not is_admin(user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
+    return user
+
+
+def _require_min_role(required_role: str):
+    def _dep(
+        credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+        session: Session = Depends(get_session),
+    ) -> User:
+        user = get_current_user(credentials, session)
+        if not has_min_role(user.role, required_role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires role >= {required_role}",
+            )
+        return user
+
+    return _dep
+
+
+get_current_intermediate = _require_min_role(ROLE_INTERMEDIATE)
+get_current_advanced = _require_min_role(ROLE_ADVANCED)
 

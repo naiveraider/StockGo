@@ -11,6 +11,8 @@ from app.models.instrument import Instrument
 from app.models.market import MarketBar, TechnicalFeature
 from app.models.news import NewsItem
 from app.models.user import User
+from app.models.user_selection import UserSelection
+from app.models.user_bias_selection import UserBiasSelection
 
 __all__ = [
     "User",
@@ -26,5 +28,7 @@ __all__ = [
     "FinancialNote",
     "AnalysisRun",
     "AnalysisOutput",
+    "UserSelection",
+    "UserBiasSelection",
 ]
 

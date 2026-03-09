@@ -4,15 +4,20 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
+from sqlmodel import select
 
 from app.db.session import get_session
 from app.schemas.analysis import AnalysisRunRequest, AnalysisRunResponse
 from app.schemas.markets import MarketsOverview
 from app.schemas.stock import ChartResponse, HistoryResponse, NewsListResponse, StockOverview
+from app.models.user import User
+from app.models.instrument import Instrument
+from app.models.user_bias_selection import UserBiasSelection
 from app.services.analysis_service import get_latest_report, get_run_response, run_analysis_sync
 from app.services.instrument_service import get_or_create_instrument
 from app.services.markets_service import get_markets_overview
 from app.services.stock_service import get_chart_data, get_history, get_news_list, get_stock_overview
+from app.services.auth_service import get_current_intermediate
 
 
 router = APIRouter()
@@ -43,12 +48,24 @@ def report_long_term(
     ticker: str,
     years: int = Query(5, ge=1, le=15),
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_intermediate),
 ):
+    ticker_norm = ticker.strip().upper()
+    selected = session.exec(
+        select(UserBiasSelection)
+        .join(Instrument, Instrument.id == UserBiasSelection.instrument_id)
+        .where(UserBiasSelection.user_id == current_user.id)
+        .where(UserBiasSelection.bucket == "long")
+        .where(Instrument.ticker == ticker_norm)
+    ).first()
+    if selected is None:
+        return AnalysisRunResponse(status="failed", run_id="", error="Ticker not selected in your screener")
+
     # Long-term bias: longer lookback, typically price/technicals weighted more than headlines.
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=365 * years)
     req = AnalysisRunRequest(
-        ticker=ticker,
+        ticker=ticker_norm,
         start=start,
         end=end,
         timeframe="1d",

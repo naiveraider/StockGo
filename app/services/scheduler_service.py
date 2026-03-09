@@ -86,14 +86,8 @@ class SchedulerService:
             max_instances=1,
             coalesce=True,
             misfire_grace_time=60,
+            next_run_time=_now_utc(),
         )
-
-        # Run an initial quotes refresh once at startup
-        try:
-            self._update_quotes_job()
-        except Exception:
-            # Don't block startup if initial quotes refresh fails
-            pass
 
         self._scheduler.start()
 

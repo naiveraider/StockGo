@@ -4,6 +4,7 @@ sqlmodel>=0.0.16
 pymysql>=1.1.0
 cryptography>=42.0.0
 pydantic-settings>=2.2.1
+email-validator>=2.2.0
 python-dotenv>=1.0.1
 
 yfinance>=0.2.40
