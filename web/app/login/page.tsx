@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { setStoredToken } from "../../lib/auth";
 
@@ -21,7 +21,7 @@ interface TokenResponse {
   user: User;
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode: Mode = searchParams.get("mode") === "register" ? "register" : "login";
@@ -132,5 +132,22 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <div className="mx-auto w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h1 className="text-2xl font-semibold text-slate-900">Loading...</h1>
+      <p className="mt-2 text-sm text-slate-600">Preparing the login form.</p>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
