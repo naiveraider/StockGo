@@ -9,7 +9,7 @@ A U.S. stock analysis backend built on free data sources: market data (`yfinance
 1. Start MySQL (optional but recommended)
 
 ```bash
-docker compose up -d mysql adminer
+docker compose up -d mysql
 ```
 
 2. Configure environment variables
@@ -37,7 +37,7 @@ npm run dev
 
 Open http://localhost:3000 in your browser. If you see “localhost took too long to respond”, make sure the API from the previous step is running. Visiting http://localhost:8000/health should return `{"ok":true}`.
 
-### Docker Deploy (Frontend + Backend + MySQL + Adminer)
+### Docker Deploy (Frontend + Backend + MySQL)
 
 1. Prepare environment variables
 
@@ -64,7 +64,6 @@ docker compose up -d --build
 
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000/health
-- Adminer: http://localhost:8080
 
 4. Stop the stack
 
