@@ -4,10 +4,12 @@ A U.S. stock analysis backend built on free data sources: market data (`yfinance
 
 ## How To Run
 
+### Local Python + Node
+
 1. Start MySQL (optional but recommended)
 
 ```bash
-docker compose up -d
+docker compose up -d mysql adminer
 ```
 
 2. Configure environment variables
@@ -34,6 +36,47 @@ npm run dev
 ```
 
 Open http://localhost:3000 in your browser. If you see “localhost took too long to respond”, make sure the API from the previous step is running. Visiting http://localhost:8000/health should return `{"ok":true}`.
+
+### Docker Deploy (Frontend + Backend + MySQL + Adminer)
+
+1. Prepare environment variables
+
+```bash
+cp .env.example .env
+```
+
+At minimum, review these values in `.env` before starting:
+
+- `MYSQL_PASSWORD`
+- `MYSQL_ROOT_PASSWORD`
+- `JWT_SECRET`
+- `SEC_USER_AGENT`
+- `NEXT_PUBLIC_API_BASE` if the frontend will not be accessed from the same machine as the backend
+- `CORS_ORIGINS` if the frontend origin is not `http://localhost:3000`
+
+2. Build and start the full stack
+
+```bash
+docker compose up -d --build
+```
+
+3. Open the services
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000/health
+- Adminer: http://localhost:8080
+
+4. Stop the stack
+
+```bash
+docker compose down
+```
+
+If you need to reset MySQL data as well:
+
+```bash
+docker compose down -v
+```
 
 ## Common Endpoints
 

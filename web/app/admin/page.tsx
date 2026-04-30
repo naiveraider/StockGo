@@ -35,6 +35,8 @@ interface AdminPolicy {
   updated_at: string | null;
 }
 
+type AdminTab = "roles" | "policies";
+
 export default function AdminPage() {
   const apiBase = useMemo(resolveApiBase, []);
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
@@ -50,6 +52,7 @@ export default function AdminPage() {
   const [savingPolicyKey, setSavingPolicyKey] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
+  const [activeTab, setActiveTab] = useState<AdminTab>("roles");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -278,7 +281,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`}
       <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Admin Control Center</h1>
-          <p className="text-sm text-slate-600">Manage user roles and the four LLM policies used by the platform.</p>
+          <p className="text-sm text-slate-600">Manage user access and the four LLM policies used by the platform.</p>
         </div>
         <button
           type="button"
@@ -287,6 +290,40 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`}
         >
           Logout
         </button>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("roles")}
+            className={`rounded-lg px-4 py-3 text-left text-sm transition ${
+              activeTab === "roles"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <div className="font-medium">User roles</div>
+            <div className={`mt-1 text-xs ${activeTab === "roles" ? "text-slate-200" : "text-slate-500"}`}>
+              Manage member, intermediate, advanced, and admin roles.
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("policies")}
+            className={`rounded-lg px-4 py-3 text-left text-sm transition ${
+              activeTab === "policies"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <div className="font-medium">LLM policy management</div>
+            <div className={`mt-1 text-xs ${activeTab === "policies" ? "text-slate-200" : "text-slate-500"}`}>
+              Edit the prompt groups used for bias reports and pick generation.
+            </div>
+          </button>
+        </div>
       </div>
 
       {pageMessage && (
@@ -299,134 +336,140 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`}
         </div>
       )}
 
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">User roles</h2>
-          <p className="text-sm text-slate-600">Manage member, intermediate, advanced, and admin roles.</p>
-        </div>
+      {activeTab === "roles" && (
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">User roles</h2>
+            <p className="text-sm text-slate-600">Manage member, intermediate, advanced, and admin roles.</p>
+          </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">ID</th>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
-                <th className="px-4 py-3 text-left font-medium">Role</th>
-                <th className="px-4 py-3 text-left font-medium">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingUsers && (
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                    Loading users...
-                  </td>
+                  <th className="px-4 py-3 text-left font-medium">ID</th>
+                  <th className="px-4 py-3 text-left font-medium">Email</th>
+                  <th className="px-4 py-3 text-left font-medium">Name</th>
+                  <th className="px-4 py-3 text-left font-medium">Role</th>
+                  <th className="px-4 py-3 text-left font-medium">Created</th>
                 </tr>
-              )}
-
-              {!loadingUsers && users.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                    No users found.
-                  </td>
-                </tr>
-              )}
-
-              {!loadingUsers &&
-                users.map((u) => (
-                  <tr key={u.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 text-slate-700">{u.id}</td>
-                    <td className="px-4 py-3 text-slate-900">{u.email}</td>
-                    <td className="px-4 py-3 text-slate-700">{u.full_name || "-"}</td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={u.role}
-                        disabled={savingUserId === u.id}
-                        onChange={(e) => updateRole(u.id, e.target.value)}
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none focus:border-yahooBlue"
-                      >
-                        {roles.map((r) => (
-                          <option key={r.key} value={r.key}>
-                            {r.label}
-                          </option>
-                        ))}
-                      </select>
+              </thead>
+              <tbody>
+                {loadingUsers && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                      Loading users...
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleString() : "-"}</td>
                   </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                )}
 
-      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">LLM policy management</h2>
-          <p className="text-sm text-slate-600">Four policy groups control the prompts used for bias reports and pick generation.</p>
-        </div>
+                {!loadingUsers && users.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                      No users found.
+                    </td>
+                  </tr>
+                )}
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          {policies.map((policy) => (
-            <div key={policy.key} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900">{policy.title}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{policy.description}</p>
-                </div>
-                <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-slate-500">
-                  {policy.key.replaceAll("_", " ")}
-                </div>
-              </div>
+                {!loadingUsers &&
+                  users.map((u) => (
+                    <tr key={u.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 text-slate-700">{u.id}</td>
+                      <td className="px-4 py-3 text-slate-900">{u.email}</td>
+                      <td className="px-4 py-3 text-slate-700">{u.full_name || "-"}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={u.role}
+                          disabled={savingUserId === u.id}
+                          onChange={(e) => updateRole(u.id, e.target.value)}
+                          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none focus:border-yahooBlue"
+                        >
+                          {roles.map((r) => (
+                            <option key={r.key} value={r.key}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleString() : "-"}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
-              <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
-                Placeholders: {policy.placeholders.length > 0 ? policy.placeholders.map((item) => `{{${item}}}`).join(", ") : "None"}
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">System prompt</label>
-                  <textarea
-                    value={policy.system_prompt}
-                    onChange={(e) => updatePolicyDraft(policy.key, "system_prompt", e.target.value)}
-                    rows={5}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-yahooBlue focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">User prompt template</label>
-                  <textarea
-                    value={policy.user_prompt}
-                    onChange={(e) => updatePolicyDraft(policy.key, "user_prompt", e.target.value)}
-                    rows={12}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-800 outline-none focus:border-yahooBlue focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-xs text-slate-500">
-                  Last updated: {policy.updated_at ? new Date(policy.updated_at).toLocaleString() : "Default policy"}
-                </div>
-                <button
-                  type="button"
-                  disabled={savingPolicyKey === policy.key}
-                  onClick={() => savePolicy(policy)}
-                  className="rounded-lg bg-yahooBlue px-3 py-2 text-sm font-medium text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {savingPolicyKey === policy.key ? "Saving..." : "Save policy"}
-                </button>
-              </div>
+      {activeTab === "policies" && (
+        <>
+          <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">LLM policy management</h2>
+              <p className="text-sm text-slate-600">Four policy groups control the prompts used for bias reports and pick generation.</p>
             </div>
-          ))}
-        </div>
-      </section>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Policy groups: Short-term bias, Long-term bias, Short-term pick, Long-term pick.
-      </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {policies.map((policy) => (
+                <div key={policy.key} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">{policy.title}</h3>
+                      <p className="mt-1 text-sm text-slate-600">{policy.description}</p>
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      {policy.key.replaceAll("_", " ")}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                    Placeholders: {policy.placeholders.length > 0 ? policy.placeholders.map((item) => `{{${item}}}`).join(", ") : "None"}
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">System prompt</label>
+                      <textarea
+                        value={policy.system_prompt}
+                        onChange={(e) => updatePolicyDraft(policy.key, "system_prompt", e.target.value)}
+                        rows={5}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-yahooBlue focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">User prompt template</label>
+                      <textarea
+                        value={policy.user_prompt}
+                        onChange={(e) => updatePolicyDraft(policy.key, "user_prompt", e.target.value)}
+                        rows={12}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-800 outline-none focus:border-yahooBlue focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="text-xs text-slate-500">
+                      Last updated: {policy.updated_at ? new Date(policy.updated_at).toLocaleString() : "Default policy"}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={savingPolicyKey === policy.key}
+                      onClick={() => savePolicy(policy)}
+                      className="rounded-lg bg-yahooBlue px-3 py-2 text-sm font-medium text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {savingPolicyKey === policy.key ? "Saving..." : "Save policy"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Policy groups: Short-term bias, Long-term bias, Short-term pick, Long-term pick.
+          </div>
+        </>
+      )}
     </div>
   );
 }

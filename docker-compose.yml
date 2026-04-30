@@ -1,25 +1,66 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: stockgo-mysql
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stockgo-backend
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      MYSQL_DATABASE: stockgo
-      MYSQL_USER: stockgo
-      MYSQL_PASSWORD: stockgo
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_DB: ${MYSQL_DB:-stockgo}
+      MYSQL_USER: ${MYSQL_USER:-stockgo}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-stockgo}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     ports:
-      - "3306:3306"
-    volumes:
-      - stockgo_mysql_data:/var/lib/mysql
-    command: ["--default-authentication-plugin=mysql_native_password"]
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+    container_name: stockgo-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+      PORT: 3000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   adminer:
     image: adminer:4
     container_name: stockgo-adminer
+    restart: unless-stopped
     ports:
       - "8080:8080"
-    depends_on:
-      - mysql
-
-volumes:
-  stockgo_mysql_data:

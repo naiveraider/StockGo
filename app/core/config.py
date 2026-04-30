@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     app_name: str = Field(default="StockGo", alias="APP_NAME")
     env: Literal["dev", "test", "prod"] = Field(default="dev", alias="ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    cors_origins: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000",
+        alias="CORS_ORIGINS",
+    )
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
@@ -53,6 +57,9 @@ class Settings(BaseSettings):
 
     def watchlist_tickers(self) -> list[str]:
         return [t.strip().upper() for t in (self.watchlist or "").split(",") if t.strip()]
+
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in (self.cors_origins or "").split(",") if origin.strip()]
 
     @property
     def mysql_url(self) -> str:

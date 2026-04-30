@@ -1,0 +1,10 @@
+.git
+.gitignore
+.idea
+.venv
+__pycache__
+.DS_Store
+.env
+web/node_modules
+web/.next
+web/out
