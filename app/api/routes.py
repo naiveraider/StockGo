@@ -72,7 +72,7 @@ def report_long_term(
         include_news=False,
         include_macro=False,
     )
-    return run_analysis_sync(session, req)
+    return run_analysis_sync(session, req, policy_key="long_term_bias")
 
 
 @router.get("/v1/stock/overview", response_model=StockOverview)

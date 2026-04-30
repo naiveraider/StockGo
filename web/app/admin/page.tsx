@@ -25,6 +25,16 @@ interface RoleItem {
   label: string;
 }
 
+interface AdminPolicy {
+  key: string;
+  title: string;
+  description: string;
+  placeholders: string[];
+  system_prompt: string;
+  user_prompt: string;
+  updated_at: string | null;
+}
+
 export default function AdminPage() {
   const apiBase = useMemo(resolveApiBase, []);
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
@@ -34,8 +44,10 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<RoleItem[]>([]);
+  const [policies, setPolicies] = useState<AdminPolicy[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [savingUserId, setSavingUserId] = useState<number | null>(null);
+  const [savingPolicyKey, setSavingPolicyKey] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
 
@@ -70,9 +82,10 @@ export default function AdminPage() {
     setLoginError("");
     try {
       const headers = { Authorization: `Bearer ${authToken}` };
-      const [usersResp, rolesResp] = await Promise.all([
+      const [usersResp, rolesResp, policiesResp] = await Promise.all([
         fetch(`${apiBase}/admin/users`, { headers }),
         fetch(`${apiBase}/admin/roles`, { headers }),
+        fetch(`${apiBase}/admin/policies`, { headers }),
       ]);
 
       if (usersResp.status === 401 || usersResp.status === 403) {
@@ -80,15 +93,17 @@ export default function AdminPage() {
         setLoginError("Your session expired. Please log in again.");
         return;
       }
-      if (!usersResp.ok || !rolesResp.ok) {
+      if (!usersResp.ok || !rolesResp.ok || !policiesResp.ok) {
         setLoginError("Failed to load admin data.");
         return;
       }
 
       const usersData = (await usersResp.json()) as AdminUser[];
       const rolesData = (await rolesResp.json()) as { roles: RoleItem[] };
+      const policiesData = (await policiesResp.json()) as AdminPolicy[];
       setUsers(usersData);
       setRoles(rolesData.roles || []);
+      setPolicies(policiesData || []);
     } catch {
       setLoginError("Network error while loading admin data.");
     } finally {
@@ -99,6 +114,7 @@ export default function AdminPage() {
   function handleLogout() {
     setToken("");
     setUsers([]);
+    setPolicies([]);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("adminToken");
     }
@@ -155,6 +171,44 @@ export default function AdminPage() {
       setPageMessage("Request failed.");
     } finally {
       setSavingUserId(null);
+    }
+  }
+
+  function updatePolicyDraft(policyKey: string, field: "system_prompt" | "user_prompt", value: string) {
+    setPolicies((prev) => prev.map((policy) => (policy.key === policyKey ? { ...policy, [field]: value } : policy)));
+  }
+
+  async function savePolicy(policy: AdminPolicy) {
+    if (!token) return;
+    setSavingPolicyKey(policy.key);
+    setPageMessage("");
+    try {
+      const resp = await fetch(`${apiBase}/admin/policies/${policy.key}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          system_prompt: policy.system_prompt,
+          user_prompt: policy.user_prompt,
+        }),
+      });
+      const data = (await resp.json()) as AdminPolicy | { detail?: string };
+      if (!resp.ok) {
+        setMessageError(true);
+        setPageMessage("detail" in data ? data.detail || "Failed to update policy." : "Failed to update policy.");
+        return;
+      }
+
+      setPolicies((prev) => prev.map((item) => (item.key === policy.key ? (data as AdminPolicy) : item)));
+      setMessageError(false);
+      setPageMessage(`${policy.title} policy updated successfully.`);
+    } catch {
+      setMessageError(true);
+      setPageMessage("Request failed.");
+    } finally {
+      setSavingPolicyKey(null);
     }
   }
 
@@ -223,8 +277,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`}
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">User Role Administration</h1>
-          <p className="text-sm text-slate-600">Manage member, intermediate, advanced, and admin roles.</p>
+          <h1 className="text-xl font-semibold text-slate-900">Admin Control Center</h1>
+          <p className="text-sm text-slate-600">Manage user roles and the four LLM policies used by the platform.</p>
         </div>
         <button
           type="button"
@@ -245,59 +299,133 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead className="bg-slate-50 text-slate-600">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">ID</th>
-              <th className="px-4 py-3 text-left font-medium">Email</th>
-              <th className="px-4 py-3 text-left font-medium">Name</th>
-              <th className="px-4 py-3 text-left font-medium">Role</th>
-              <th className="px-4 py-3 text-left font-medium">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadingUsers && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                  Loading users...
-                </td>
-              </tr>
-            )}
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">User roles</h2>
+          <p className="text-sm text-slate-600">Manage member, intermediate, advanced, and admin roles.</p>
+        </div>
 
-            {!loadingUsers && users.length === 0 && (
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full min-w-[720px] border-collapse text-sm">
+            <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                  No users found.
-                </td>
+                <th className="px-4 py-3 text-left font-medium">ID</th>
+                <th className="px-4 py-3 text-left font-medium">Email</th>
+                <th className="px-4 py-3 text-left font-medium">Name</th>
+                <th className="px-4 py-3 text-left font-medium">Role</th>
+                <th className="px-4 py-3 text-left font-medium">Created</th>
               </tr>
-            )}
-
-            {!loadingUsers &&
-              users.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3 text-slate-700">{u.id}</td>
-                  <td className="px-4 py-3 text-slate-900">{u.email}</td>
-                  <td className="px-4 py-3 text-slate-700">{u.full_name || "-"}</td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={u.role}
-                      disabled={savingUserId === u.id}
-                      onChange={(e) => updateRole(u.id, e.target.value)}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none focus:border-yahooBlue"
-                    >
-                      {roles.map((r) => (
-                        <option key={r.key} value={r.key}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
+            </thead>
+            <tbody>
+              {loadingUsers && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                    Loading users...
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleString() : "-"}</td>
                 </tr>
-              ))}
-          </tbody>
-        </table>
+              )}
+
+              {!loadingUsers && users.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                    No users found.
+                  </td>
+                </tr>
+              )}
+
+              {!loadingUsers &&
+                users.map((u) => (
+                  <tr key={u.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 text-slate-700">{u.id}</td>
+                    <td className="px-4 py-3 text-slate-900">{u.email}</td>
+                    <td className="px-4 py-3 text-slate-700">{u.full_name || "-"}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={u.role}
+                        disabled={savingUserId === u.id}
+                        onChange={(e) => updateRole(u.id, e.target.value)}
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none focus:border-yahooBlue"
+                      >
+                        {roles.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleString() : "-"}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">LLM policy management</h2>
+          <p className="text-sm text-slate-600">Four policy groups control the prompts used for bias reports and pick generation.</p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          {policies.map((policy) => (
+            <div key={policy.key} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">{policy.title}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{policy.description}</p>
+                </div>
+                <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-slate-500">
+                  {policy.key.replaceAll("_", " ")}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                Placeholders: {policy.placeholders.length > 0 ? policy.placeholders.map((item) => `{{${item}}}`).join(", ") : "None"}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">System prompt</label>
+                  <textarea
+                    value={policy.system_prompt}
+                    onChange={(e) => updatePolicyDraft(policy.key, "system_prompt", e.target.value)}
+                    rows={5}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-yahooBlue focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">User prompt template</label>
+                  <textarea
+                    value={policy.user_prompt}
+                    onChange={(e) => updatePolicyDraft(policy.key, "user_prompt", e.target.value)}
+                    rows={12}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-800 outline-none focus:border-yahooBlue focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="text-xs text-slate-500">
+                  Last updated: {policy.updated_at ? new Date(policy.updated_at).toLocaleString() : "Default policy"}
+                </div>
+                <button
+                  type="button"
+                  disabled={savingPolicyKey === policy.key}
+                  onClick={() => savePolicy(policy)}
+                  className="rounded-lg bg-yahooBlue px-3 py-2 text-sm font-medium text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingPolicyKey === policy.key ? "Saving..." : "Save policy"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        Policy groups: Short-term bias, Long-term bias, Short-term pick, Long-term pick.
       </div>
     </div>
   );

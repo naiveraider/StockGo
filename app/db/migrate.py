@@ -69,3 +69,41 @@ def ensure_users_role_column(engine) -> None:
             if "role" not in cols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32) NOT NULL DEFAULT 'member'"))
 
+
+def ensure_llm_policies_prompt_columns(engine) -> None:
+    """Ensure llm policy prompt columns use a text type large enough for prompt templates."""
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        if dialect == "mysql":
+            table_exists = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'llm_policies'
+                    """
+                )
+            ).scalar()
+            if int(table_exists or 0) == 0:
+                return
+
+            for column_name in ("system_prompt", "user_prompt"):
+                column_type = conn.execute(
+                    text(
+                        """
+                        SELECT DATA_TYPE
+                        FROM information_schema.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                          AND TABLE_NAME = 'llm_policies'
+                          AND COLUMN_NAME = :column_name
+                        """
+                    ),
+                    {"column_name": column_name},
+                ).scalar()
+                if column_type is None:
+                    continue
+                normalized = str(column_type).lower()
+                if normalized not in {"text", "mediumtext", "longtext"}:
+                    conn.execute(text(f"ALTER TABLE llm_policies MODIFY COLUMN {column_name} TEXT NOT NULL"))
+

@@ -6,9 +6,11 @@ from sqlmodel import Session, select
 from app.core.config import get_settings
 from app.core.roles import ROLE_ADMIN
 from app.db.engine import get_engine
-from app.db.migrate import ensure_instruments_is_etf_column, ensure_users_role_column
+from app.db.migrate import ensure_instruments_is_etf_column, ensure_llm_policies_prompt_columns, ensure_users_role_column
 from app.models.user import User
 from app.services.auth_service import hash_password, verify_password
+from app.services.pick_cache_service import ensure_default_pick_caches
+from app.services.policy_service import ensure_default_llm_policies
 
 
 def ensure_seed_admin(engine) -> None:
@@ -64,6 +66,9 @@ def init_db() -> None:
     engine = get_engine()
     SQLModel.metadata.create_all(engine)
     ensure_instruments_is_etf_column(engine)
+    ensure_llm_policies_prompt_columns(engine)
     ensure_users_role_column(engine)
     ensure_seed_admin(engine)
+    ensure_default_llm_policies(engine)
+    ensure_default_pick_caches(engine)
 

@@ -11,6 +11,7 @@ from app.models.market import MarketBar, TechnicalFeature
 from app.models.news import NewsItem
 from app.schemas.analysis import Bias
 from app.services.llm_service import LlmUnavailable, openai_compatible_chat_json
+from app.services.policy_service import get_policy_prompts, render_policy_template
 
 
 def _sha256(obj: Any) -> str:
@@ -215,7 +216,12 @@ def rule_report(snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def generate_report(snapshot: dict[str, Any]) -> tuple[dict[str, Any], str, str | None]:
+def generate_report(
+    snapshot: dict[str, Any],
+    *,
+    session: Session | None = None,
+    policy_key: str = "short_term_bias",
+) -> tuple[dict[str, Any], str, str | None]:
     """
     Returns (report_json, input_hash, model_used)
     """
@@ -235,19 +241,15 @@ def generate_report(snapshot: dict[str, Any]) -> tuple[dict[str, Any], str, str 
         "evidence": {"price_features_text": "string", "news": ["..."]},
     }
 
-    system = (
-        "You are a stock analyst. You must be concise, evidence-based, and avoid making up facts. "
-        "Use the provided price feature text and headlines only."
-    )
-    user = (
-        f"Price summary:\n{input_obj['price_features_text']}\n\n"
-        "Recent headlines (most recent first):\n"
-        + "\n".join([f"[{i}] {n.get('title')}" for i, n in enumerate(input_obj["news"][:10])])
-        + "\n\nTask:\n"
-        "1) Summarize key events impacting the stock (3-6 bullets)\n"
-        "2) Predict short-term market bias (UP/DOWN/NEUTRAL)\n"
-        "3) Provide reasoning in 2-3 sentences citing evidence indices like [0], [1]\n"
-        "Return JSON only."
+    headlines = "\n".join([f"[{i}] {n.get('title')}" for i, n in enumerate(input_obj["news"][:10])]) or "No headlines available"
+    system_template, user_template = get_policy_prompts(session, policy_key)
+    system = system_template
+    user = render_policy_template(
+        user_template,
+        {
+            "price_summary": input_obj["price_features_text"],
+            "headline_list": headlines,
+        },
     )
 
     try:

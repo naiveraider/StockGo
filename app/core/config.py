@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
 
     scheduler_enabled: bool = Field(default=False, alias="SCHEDULER_ENABLED")
+    scheduler_financials_only: bool = Field(default=False, alias="SCHEDULER_FINANCIALS_ONLY")
     watchlist: str = Field(default="TSLA,AAPL,MSFT", alias="WATCHLIST")
     market_update_minutes: int = Field(default=30, alias="MARKET_UPDATE_MINUTES")
     news_update_minutes: int = Field(default=30, alias="NEWS_UPDATE_MINUTES")

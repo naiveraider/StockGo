@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup():
         init_db()
+        scheduler_service.run_all_pick_caches_once()
         scheduler_service.start()
 
     @app.on_event("shutdown")

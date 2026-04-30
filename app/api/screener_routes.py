@@ -11,10 +11,18 @@ from app.models.instrument import Instrument
 from app.models.user import User
 from app.models.user_bias_selection import UserBiasSelection
 from app.schemas.analysis import AnalysisRunRequest, AnalysisRunResponse
-from app.schemas.universe import InstrumentOut, InstrumentsPage, ShortTermRow, ShortTermPage
+from app.schemas.universe import (
+    InstrumentOut,
+    LongTermIdeasResponse,
+    InstrumentsPage,
+    ShortTermIdeasResponse,
+    ShortTermPage,
+    ShortTermRow,
+)
 from app.services.analysis_service import run_analysis_sync
 from app.services.auth_service import get_current_advanced, get_current_intermediate, get_current_user
 from app.services.instrument_service import get_or_create_instrument
+from app.services.pick_cache_service import read_pick_cache
 
 
 router = APIRouter(prefix="/v1/screener", tags=["screener"])
@@ -331,4 +339,29 @@ def screener_long_term_picks(
     total = len(picks)
     items = picks[offset : offset + limit]
     return ShortTermPage(items=items, total=total)
+
+
+@router.get("/short-term-ideas", response_model=ShortTermIdeasResponse)
+def screener_short_term_ideas(
+    idea_count: int = Query(3, ge=3, le=5),
+    candidate_pool_size: int = Query(12, ge=5, le=25),
+    min_confidence: float = Query(0.65, ge=0.0, le=1.0),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_advanced),
+):
+    del idea_count, candidate_pool_size, min_confidence
+    del current_user
+    return read_pick_cache(session, "short_term_pick")
+
+
+@router.get("/long-term-ideas", response_model=LongTermIdeasResponse)
+def screener_long_term_ideas(
+    idea_count: int = Query(3, ge=3, le=5),
+    candidate_pool_size: int = Query(15, ge=5, le=25),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_advanced),
+):
+    del idea_count, candidate_pool_size
+    del current_user
+    return read_pick_cache(session, "long_term_pick")
 

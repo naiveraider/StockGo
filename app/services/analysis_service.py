@@ -116,7 +116,12 @@ def store_output(session: Session, *, run_db_id: int, report: dict) -> None:
     _commit_with_retry(session, on_retry=lambda: session.add(out))
 
 
-def run_analysis_sync(session: Session, req: AnalysisRunRequest) -> AnalysisRunResponse:
+def run_analysis_sync(
+    session: Session,
+    req: AnalysisRunRequest,
+    *,
+    policy_key: str = "short_term_bias",
+) -> AnalysisRunResponse:
     inst = get_or_create_instrument(session, req.ticker)
     start = as_utc_dt(req.start, end_of_day=False)
     end = as_utc_dt(req.end, end_of_day=True)
@@ -156,7 +161,7 @@ def run_analysis_sync(session: Session, req: AnalysisRunRequest) -> AnalysisRunR
             start=start,
             end=end,
         )
-        report_json, input_hash, model_used = generate_report(snapshot)
+        report_json, input_hash, model_used = generate_report(snapshot, session=session, policy_key=policy_key)
 
         store_output(session, run_db_id=run.id, report=report_json)
         set_run_completed(session, run, input_hash=input_hash, model_used=model_used)

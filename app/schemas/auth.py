@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -36,6 +38,30 @@ class AdminUserUpdate(BaseModel):
 class AdminLoginRequest(BaseModel):
     username: str
     password: str
+
+
+class AdminLlmPolicyOut(BaseModel):
+    key: str
+    title: str
+    description: str
+    placeholders: list[str] = Field(default_factory=list)
+    system_prompt: str
+    user_prompt: str
+    updated_at: str | None = None
+
+
+class AdminLlmPolicyUpdate(BaseModel):
+    system_prompt: str = Field(min_length=1)
+    user_prompt: str = Field(min_length=1)
+
+
+class AdminSyncResponse(BaseModel):
+    job: str
+    tickers: list[str]
+    requested: int
+    succeeded: int
+    failed: int
+    details: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TokenResponse(BaseModel):

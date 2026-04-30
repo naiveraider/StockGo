@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+import logging
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.models.financials import BalanceSheet, CashFlowStatement, IncomeStatement
 from app.models.instrument import Instrument
+from app.services.financial_statement_service import (
+    upsert_balance_sheet,
+    upsert_cash_flow_statement,
+    upsert_financial_statement,
+    upsert_income_statement,
+)
 from app.services.instrument_service import get_or_create_instrument
+
+
+logger = logging.getLogger(__name__)
 
 
 def _df_to_records(
@@ -34,133 +43,187 @@ def _df_to_records(
     return out
 
 
-def _upsert_balance_sheets(session: Session, inst: Instrument, df: Optional[pd.DataFrame], *, is_quarterly: bool) -> int:
+def _step_result(*, step: str, generated: bool, source_rows: int, inserted: int, updated: int) -> dict[str, Any]:
+    return {
+        "step": step,
+        "generated": generated,
+        "source_rows": source_rows,
+        "inserted": inserted,
+        "updated": updated,
+    }
+
+
+def _upsert_balance_sheets(
+    session: Session,
+    inst: Instrument,
+    df: Optional[pd.DataFrame],
+    *,
+    is_quarterly: bool,
+) -> dict[str, Any]:
     records = _df_to_records(df, is_quarterly=is_quarterly)
+    step_name = "balance_sheet_quarterly" if is_quarterly else "balance_sheet_annual"
     if not records:
-        return 0
+        return _step_result(step=step_name, generated=False, source_rows=0, inserted=0, updated=0)
     inserted = 0
+    updated = 0
     for period_end, data in records:
         fy = period_end.year
         fq = None if not is_quarterly else (period_end.month - 1) // 3 + 1
-        existing = session.exec(
-            select(BalanceSheet).where(
-                BalanceSheet.instrument_id == inst.id,
-                BalanceSheet.period_end == period_end,
-                BalanceSheet.fiscal_year == fy,
-                BalanceSheet.fiscal_quarter == fq,
-            )
-        ).first()
-        if existing:
-            existing.data = data
-            session.add(existing)
-        else:
-            bs = BalanceSheet(
-                instrument_id=inst.id,
-                period_start=None,
-                period_end=period_end,
-                fiscal_year=fy,
-                fiscal_quarter=fq,
-                currency=None,
-                filed_at=None,
-                data=data,
-            )
-            session.add(bs)
+        upsert_financial_statement(
+            session,
+            instrument_id=inst.id,
+            statement_type="balance_sheet",
+            period_end=period_end,
+            fiscal_year=fy,
+            fiscal_quarter=fq,
+            data=data,
+            is_annual=not is_quarterly,
+            currency=None,
+            source="yahoo",
+            filed_at=None,
+        )
+        created = upsert_balance_sheet(
+            session,
+            instrument_id=inst.id,
+            period_end=period_end,
+            fiscal_year=fy,
+            fiscal_quarter=fq,
+            data=data,
+            period_start=None,
+            currency=None,
+            filed_at=None,
+        )
+        if created:
             inserted += 1
+        else:
+            updated += 1
     session.commit()
-    return inserted
+    return _step_result(step=step_name, generated=True, source_rows=len(records), inserted=inserted, updated=updated)
 
 
 def _upsert_income_statements(
     session: Session, inst: Instrument, df: Optional[pd.DataFrame], *, is_quarterly: bool
-) -> int:
+) -> dict[str, Any]:
     records = _df_to_records(df, is_quarterly=is_quarterly)
+    step_name = "income_statement_quarterly" if is_quarterly else "income_statement_annual"
     if not records:
-        return 0
+        return _step_result(step=step_name, generated=False, source_rows=0, inserted=0, updated=0)
     inserted = 0
+    updated = 0
     for period_end, data in records:
         fy = period_end.year
         fq = None if not is_quarterly else (period_end.month - 1) // 3 + 1
-        existing = session.exec(
-            select(IncomeStatement).where(
-                IncomeStatement.instrument_id == inst.id,
-                IncomeStatement.period_end == period_end,
-                IncomeStatement.fiscal_year == fy,
-                IncomeStatement.fiscal_quarter == fq,
-            )
-        ).first()
-        if existing:
-            existing.data = data
-            session.add(existing)
-        else:
-            row = IncomeStatement(
-                instrument_id=inst.id,
-                period_start=None,
-                period_end=period_end,
-                fiscal_year=fy,
-                fiscal_quarter=fq,
-                currency=None,
-                filed_at=None,
-                data=data,
-            )
-            session.add(row)
+        upsert_financial_statement(
+            session,
+            instrument_id=inst.id,
+            statement_type="income_statement",
+            period_end=period_end,
+            fiscal_year=fy,
+            fiscal_quarter=fq,
+            data=data,
+            is_annual=not is_quarterly,
+            currency=None,
+            source="yahoo",
+            filed_at=None,
+        )
+        created = upsert_income_statement(
+            session,
+            instrument_id=inst.id,
+            period_end=period_end,
+            fiscal_year=fy,
+            fiscal_quarter=fq,
+            data=data,
+            period_start=None,
+            currency=None,
+            filed_at=None,
+        )
+        if created:
             inserted += 1
+        else:
+            updated += 1
     session.commit()
-    return inserted
+    return _step_result(step=step_name, generated=True, source_rows=len(records), inserted=inserted, updated=updated)
 
 
 def _upsert_cash_flows(
     session: Session, inst: Instrument, df: Optional[pd.DataFrame], *, is_quarterly: bool
-) -> int:
+) -> dict[str, Any]:
     records = _df_to_records(df, is_quarterly=is_quarterly)
+    step_name = "cash_flow_quarterly" if is_quarterly else "cash_flow_annual"
     if not records:
-        return 0
+        return _step_result(step=step_name, generated=False, source_rows=0, inserted=0, updated=0)
     inserted = 0
+    updated = 0
     for period_end, data in records:
         fy = period_end.year
         fq = None if not is_quarterly else (period_end.month - 1) // 3 + 1
-        existing = session.exec(
-            select(CashFlowStatement).where(
-                CashFlowStatement.instrument_id == inst.id,
-                CashFlowStatement.period_end == period_end,
-                CashFlowStatement.fiscal_year == fy,
-                CashFlowStatement.fiscal_quarter == fq,
-            )
-        ).first()
-        if existing:
-            existing.data = data
-            session.add(existing)
-        else:
-            row = CashFlowStatement(
-                instrument_id=inst.id,
-                period_start=None,
-                period_end=period_end,
-                fiscal_year=fy,
-                fiscal_quarter=fq,
-                currency=None,
-                filed_at=None,
-                data=data,
-            )
-            session.add(row)
+        upsert_financial_statement(
+            session,
+            instrument_id=inst.id,
+            statement_type="cash_flow_statement",
+            period_end=period_end,
+            fiscal_year=fy,
+            fiscal_quarter=fq,
+            data=data,
+            is_annual=not is_quarterly,
+            currency=None,
+            source="yahoo",
+            filed_at=None,
+        )
+        created = upsert_cash_flow_statement(
+            session,
+            instrument_id=inst.id,
+            period_end=period_end,
+            fiscal_year=fy,
+            fiscal_quarter=fq,
+            data=data,
+            period_start=None,
+            currency=None,
+            filed_at=None,
+        )
+        if created:
             inserted += 1
+        else:
+            updated += 1
     session.commit()
-    return inserted
+    return _step_result(step=step_name, generated=True, source_rows=len(records), inserted=inserted, updated=updated)
 
 
-def sync_financials_for_ticker(session: Session, ticker: str) -> None:
+def sync_financials_for_ticker(session: Session, ticker: str) -> dict[str, Any]:
     """
     Fetches financial statements from yfinance and upserts into dedicated tables
     for a single ticker. Intended to be called from scheduler or manually.
     """
     inst = get_or_create_instrument(session, ticker)
     t = yf.Ticker(inst.ticker)
+    step_logs: list[dict[str, Any]] = []
 
     # Annual
-    _upsert_balance_sheets(session, inst, t.balance_sheet, is_quarterly=False)
-    _upsert_income_statements(session, inst, t.financials, is_quarterly=False)
-    _upsert_cash_flows(session, inst, t.cashflow, is_quarterly=False)
+    step_logs.append(_upsert_balance_sheets(session, inst, t.balance_sheet, is_quarterly=False))
+    step_logs.append(_upsert_income_statements(session, inst, t.financials, is_quarterly=False))
+    step_logs.append(_upsert_cash_flows(session, inst, t.cashflow, is_quarterly=False))
 
     # Quarterly
-    _upsert_balance_sheets(session, inst, t.quarterly_balance_sheet, is_quarterly=True)
-    _upsert_income_statements(session, inst, t.quarterly_financials, is_quarterly=True)
-    _upsert_cash_flows(session, inst, t.quarterly_cashflow, is_quarterly=True)
+    step_logs.append(_upsert_balance_sheets(session, inst, t.quarterly_balance_sheet, is_quarterly=True))
+    step_logs.append(_upsert_income_statements(session, inst, t.quarterly_financials, is_quarterly=True))
+    step_logs.append(_upsert_cash_flows(session, inst, t.quarterly_cashflow, is_quarterly=True))
+
+    for step in step_logs:
+        logger.info(
+            "financials_sync ticker=%s step=%s generated=%s source_rows=%s inserted=%s updated=%s",
+            inst.ticker,
+            step["step"],
+            step["generated"],
+            step["source_rows"],
+            step["inserted"],
+            step["updated"],
+        )
+
+    return {
+        "ticker": inst.ticker,
+        "steps": step_logs,
+        "generated_steps": sum(1 for step in step_logs if step["generated"]),
+        "inserted": sum(int(step["inserted"]) for step in step_logs),
+        "updated": sum(int(step["updated"]) for step in step_logs),
+    }
 
