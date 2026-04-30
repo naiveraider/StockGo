@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
 from typing import Any, Iterable
 
 import yfinance as yf
@@ -19,9 +20,12 @@ def _safe_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
 
 
 def _now_utc() -> datetime:
@@ -160,6 +164,7 @@ def sync_fundamental_snapshots(session: Session, tickers: list[str] | None = Non
             else:
                 failed += 1
         except Exception as exc:
+            session.rollback()
             details.append({"ticker": ticker, "status": "failed", "error": str(exc)})
             failed += 1
     return {
@@ -203,6 +208,7 @@ def warm_fundamental_snapshots(
             if detail.get("generated"):
                 synced += 1
         except Exception:
+            session.rollback()
             continue
     return synced
 

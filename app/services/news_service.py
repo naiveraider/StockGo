@@ -33,6 +33,11 @@ def _parse_published(entry) -> Optional[datetime]:
     return None
 
 
+def _normalize_news_url(url: str) -> str:
+    # Keep dedupe logic aligned with the actual VARCHAR(512) value stored in MySQL.
+    return (url or "").strip()[:512]
+
+
 def fetch_google_news_entries(query: str, *, timeout_s: float = 10.0) -> list[dict]:
     url = google_news_rss_url(query)
     with httpx.Client(timeout=timeout_s, headers={"User-Agent": "StockGo/0.1"}) as client:
@@ -81,15 +86,16 @@ def upsert_news_items(
     if not entries:
         return 0
 
-    entry_urls = [e["url"] for e in entries if e.get("url")]
+    entry_urls = [_normalize_news_url(e["url"]) for e in entries if e.get("url")]
     existing_urls = set()
     if entry_urls:
         existing_urls = set(session.exec(select(NewsItem.url).where(NewsItem.url.in_(entry_urls))).all())
     to_add: list[NewsItem] = []
+    seen_urls = set(existing_urls)
 
     for e in entries:
-        url = e["url"]
-        if url in existing_urls:
+        url = _normalize_news_url(e["url"])
+        if not url or url in seen_urls:
             continue
         published_at: Optional[datetime] = e.get("published_at")
         if published_at and (published_at < start or published_at > end):
@@ -112,14 +118,14 @@ def upsert_news_items(
                 source=source,
                 title=title[:512],
                 summary=None,
-                # Column is VARCHAR(512); enforce hard limit when inserting.
-                url=url[:512],
+                url=url,
                 lang="en",
                 sentiment_label=label,
                 sentiment_score=score,
                 sentiment_model=model,
             )
         )
+        seen_urls.add(url)
 
     if not to_add:
         return 0
