@@ -9,7 +9,7 @@ services:
       - .env
     environment:
       MYSQL_HOST: ${MYSQL_HOST:-mysql}
-      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_PORT: ${MYSQL_PORT:-3366}
       MYSQL_DB: ${MYSQL_DB:-stockgo}
       MYSQL_USER: ${MYSQL_USER:-stockgo}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-stockgo}
